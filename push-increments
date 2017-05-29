@@ -5,20 +5,31 @@
 # and mail a nicely formatted log with itemized changes.
 # Run as cronjob.
 
-bwlimit=60
-addopt=""
+# limit bandwidth, in kbps, 0 is none
+bwlimit=0
 
 # target destination of the logfiles
-log_dest="~/Logs/push-increments"
+log_dest="$HOME/Logs/push-increments"
 
 # mail receipient, leave empty for no mails
 email=""
 
+# argparse
+if [ -z "$1" ]; then
+    abort "Usage: push-increments [-i: dry run] <example.set>"
+elif [ "$1" == "-i" ]; then
+    addopt="--dry-run"
+    filename="$2"
+else
+    addopt=""
+    filename="$1"
+fi
+
 # logging
 day=$(date +"%Y/%m/%d")
 timestamp=$(date +"%Y%m%d_%H%M%S")
-logfile="${log_dest}/upgrade_${timestamp}.txt"
-mkdir -p ${log_dest} 2>/dev/null && touch ${logfile} 2>/dev/null
+logfile="${log_dest}/push_$(basename $filename)_${timestamp}.txt"
+mkdir -p "${log_dest}" 2>/dev/null && touch "${logfile}" 2>/dev/null
 chmod 644 ${logfile} # fix permissions
 
 # helpers
@@ -44,16 +55,6 @@ log () {
 	done
     fi;
 }
-
-# argparse
-if [ -z "$1" ]; then
-    abort "Usage: push-increments [-i: dry run] <example.set>"
-elif [ "$1" == "-i" ]; then
-    addopt="--dry-run"
-    filename="$2"
-else
-    filename="$1"
-fi
 
 # read file with targets
 exec 3< $filename
