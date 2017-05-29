@@ -12,7 +12,7 @@ addopt=""
 log_dest="~/Logs/push-increments"
 
 # mail receipient, leave empty for no mails
-email="thomas@krmnn.de"
+email=""
 
 # logging
 day=$(date +"%Y/%m/%d")
