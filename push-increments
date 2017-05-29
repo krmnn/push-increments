@@ -1,0 +1,93 @@
+#!/bin/bash
+# 03/2014 Thomas Karmann <thomas@krmnn.de>
+#
+# Sync multiple directories/files to a remote location via rsync
+# and mail a nicely formatted log with itemized changes.
+# Run as cronjob.
+
+bwlimit=60
+addopt=""
+
+# target destination of the logfiles
+log_dest="~/Logs/push-increments"
+
+# mail receipient, leave empty for no mails
+email="thomas@krmnn.de"
+
+# logging
+day=$(date +"%Y/%m/%d")
+timestamp=$(date +"%Y%m%d_%H%M%S")
+logfile="${log_dest}/upgrade_${timestamp}.txt"
+mkdir -p ${log_dest} 2>/dev/null && touch ${logfile} 2>/dev/null
+chmod 644 ${logfile} # fix permissions
+
+# helpers
+function abort() {
+    log "$1"
+    exit 1
+}
+
+# trap ctrl-c and call ctrl_c()
+trap ctrl_c INT
+function ctrl_c() {
+    abort "Aborted by user..."
+}
+
+log () {
+    if [[ -n $1 ]]; then
+	echo "$@" >> ${logfile}; # write to log
+	echo "$@";               # write to stdout
+    else
+	while read x; do
+	    printf ">  $x\n" >> ${logfile} 	# write to log
+	    printf ">  $x\n" 			# write to stdout
+	done
+    fi;
+}
+
+# argparse
+if [ -z "$1" ]; then
+    abort "Usage: push-increments [-i: dry run] <example.set>"
+elif [ "$1" == "-i" ]; then
+    addopt="--dry-run"
+    filename="$2"
+else
+    filename="$1"
+fi
+
+# read file with targets
+exec 3< $filename
+read -r -u 3 local_target remote_target
+if [ -z ${local_target+x} ] || [ -z ${remote_target+x} ] ; then abort "Error in set file."; fi
+
+sync="rsync --recursive \
+    --links --times --devices --specials \
+    --compress \
+    --human-readable --itemize-changes \
+    --delete --force --exclude=.DS_Store \
+    --bwlimit=${bwlimit} \
+    --iconv=UTF8-MAC,UTF8 \
+    $addopt"
+
+# read src/dest pairs
+while read -r -u 3 local_src remote_dst
+do
+    if [ -z ${local_src} ] || [ -z ${remote_dst} ]; then abort "Error in set file."; fi
+
+    # copy files
+    log "Begin syncing '$local_src' --> '$remote_target:$remote_dst'"
+    $sync $local_src $remote_target:$remote_dst | log; wait; sync_return=$?
+    log "End syncing '$local_src'."
+    log " "
+    unset local_src; unset remote_dst
+done
+
+# send mail through local 'mail(1)'
+if [ -n ${email} ]; then
+    if [ ${sync_return} -eq 0 ]; then
+        subject="[${HOSTNAME}] push-increments on ${day}: Success."
+    else
+        subject="[${HOSTNAME}] push-increments on ${day}: Failure."
+    fi
+    mail -s "${subject}" "${email}" < ${logfile}
+fi
